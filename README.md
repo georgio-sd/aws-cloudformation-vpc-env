@@ -6,6 +6,11 @@
   Private Subnets A (10.0.12.0/24) and B (10.0.22.0/24) with Local IPs and NAT Internet access<br>
   Database Subnets A (10.0.13.0/24) and B (10.0.23.0/24) with Local IPs and NO Internet access<br>
 * 2 NatGateways with ElasticIPs for Private Subnets
-* HA Bastion host runs in one of the Public Subnets with an ElasticIP attached
+* HA Bastion host runs in one of the Public Subnets with an ElasticIP attached<br>
+  With a choose of Instance type, Instance AMI ID, Key Name and on demand/spot* instance for the Bastion Host<br>
+  After termination, the Bastion host will be automatically relaunched in a different AZ<br>
+  The Bastion host will have the same puplic IP address, even after termination<br>
+  The Bastion host will have the bare minimum permissions it needs to perform its work (The principle of least privilege)<br>
+* All new resources are taged and/or named to let us know that they belong to this project
 
 ![VPC-Image](https://github.com/georgio-sd/aws-cloudformation-vpc-env/raw/master/vpc.jpg)
