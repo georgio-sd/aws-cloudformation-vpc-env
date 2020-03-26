@@ -13,4 +13,6 @@
   The Bastion host will have the bare minimum permissions it needs to perform its work (The principle of least privilege)<br>
 * All new resources are taged and/or named to let us know that they belong to this project
 
+(!) If you want to use a spot instance for the Bastion host, you need to check the number of spot instance limit in your account. By default, this number is zero and you need to request a limit increase.
+
 ![VPC-Image](https://github.com/georgio-sd/aws-cloudformation-vpc-env/raw/master/vpc.jpg)
