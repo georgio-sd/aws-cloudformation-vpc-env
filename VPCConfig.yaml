@@ -1,0 +1,358 @@
+AWSTemplateFormatVersion: 2010-09-09
+Metadata:
+  AWS::CloudFormation::Interface: 
+    ParameterGroups:
+      - 
+        Label:
+          default: "Network Configuration"
+        Parameters:
+          - VpcName
+          - AZoneNames
+          - TagName
+      - 
+        Label: 
+          default: "Bastion Host Configuration"
+        Parameters:
+          - InstanceType
+          - InstanceAmiId
+          - SpotMaxPrice
+          - KeyName
+Parameters:
+  VpcName:
+    Type: String
+    Default: 'MyCloud'
+    Description: New VPC name
+  AZoneNames:
+    Type: 'List<AWS::EC2::AvailabilityZone::Name>'
+    Description: Availability Zones (choose two zones)
+  TagName:
+    Type: String
+    Default: 'Project1'
+    Description: Tag name for all resources
+  InstanceType:
+    Type: String
+    Description: Bastion EC2 instance type
+    Default: t3.nano
+    AllowedValues: [t2.nano, t3.nano, t3a.nano]
+    ConstraintDescription: must be a valid EC2 instance type.
+  InstanceAmiId:
+    Type: 'AWS::SSM::Parameter::Value<AWS::EC2::Image::Id>'
+    Default: '/aws/service/ami-amazon-linux-latest/amzn2-ami-hvm-x86_64-gp2'
+    Description: Bastion EC2 instance AMI
+  SpotMaxPrice:
+    Type: String
+    Default: '0.0116'
+    Description: Max hourly price for a spot instance ($), set 0 if you want to use an on demand instance
+  KeyName:
+    Type: AWS::EC2::KeyPair::KeyName
+    Description: Key Name
+    ConstraintDescription: must be the name of an existing EC2 KeyPair.
+Conditions:
+  UseSpot: !Not [!Equals [!Ref SpotMaxPrice, '0']]
+Resources:
+  MyVPC:
+    Type: AWS::EC2::VPC
+    Properties: 
+      CidrBlock: 10.0.0.0/16
+      EnableDnsSupport: 'true'
+      EnableDnsHostnames: 'true'
+      InstanceTenancy: 'default'
+      Tags:
+      - Key: Name
+        Value: !Ref TagName
+      - Key: Project
+        Value: !Ref TagName
+  MyInternetGateway:
+    Type: AWS::EC2::InternetGateway
+    Properties:
+      Tags:
+      - Key: Name
+        Value: !Ref TagName
+      - Key: Project
+        Value: !Ref TagName
+  AttachGateway:
+    Type: AWS::EC2::VPCGatewayAttachment
+    Properties:
+      VpcId: !Ref MyVPC
+      InternetGatewayId: !Ref MyInternetGateway
+  PubSubnetA:
+    Type: AWS::EC2::Subnet
+    Properties: 
+      VpcId: !Ref MyVPC
+      CidrBlock: 10.0.11.0/24
+      AvailabilityZone: !Select [ 0, !Ref AZoneNames ]
+      MapPublicIpOnLaunch: 'true'
+      Tags:
+      - Key: Name
+        Value: PubSubnetA
+      - Key: Project
+        Value: !Ref TagName
+  PubSubnetB:
+    Type: AWS::EC2::Subnet
+    Properties: 
+      VpcId: !Ref MyVPC
+      CidrBlock: 10.0.21.0/24
+      AvailabilityZone: !Select [ 1, !Ref AZoneNames ]
+      MapPublicIpOnLaunch: 'true'
+      Tags:
+      - Key: Name
+        Value: PubSubnetB
+      - Key: Project
+        Value: !Ref TagName
+  PrvSubnetA:
+    Type: AWS::EC2::Subnet
+    Properties: 
+      VpcId: !Ref MyVPC
+      CidrBlock: 10.0.12.0/24
+      AvailabilityZone: !Select [ 0, !Ref AZoneNames ]
+      MapPublicIpOnLaunch: 'false'
+      Tags:
+      - Key: Name
+        Value: PrvSubnetA
+      - Key: Project
+        Value: !Ref TagName
+  PrvSubnetB:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref MyVPC
+      CidrBlock: 10.0.22.0/24
+      AvailabilityZone: !Select [ 1, !Ref AZoneNames ]
+      MapPublicIpOnLaunch: 'false'
+      Tags:
+      - Key: Name
+        Value: PrvSubnetB
+      - Key: Project
+        Value: !Ref TagName
+  DBSubnetA:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref MyVPC
+      CidrBlock: 10.0.13.0/24
+      AvailabilityZone: !Select [ 0, !Ref AZoneNames ]
+      MapPublicIpOnLaunch: 'false'
+      Tags:
+      - Key: Name
+        Value: DBSubnetA
+      - Key: Project
+        Value: !Ref TagName
+  DBSubnetB:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref MyVPC
+      CidrBlock: 10.0.23.0/24
+      AvailabilityZone: !Select [ 1, !Ref AZoneNames ]
+      MapPublicIpOnLaunch: 'false'
+      Tags:
+      - Key: Name
+        Value: DBSubnetB
+      - Key: Project
+        Value: !Ref TagName
+  PublicRouteTable:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref MyVPC
+      Tags:
+      - Key: Name
+        Value: Public
+      - Key: Project
+        Value: !Ref TagName
+  PublicRoute:
+    Type: AWS::EC2::Route
+    DependsOn: AttachGateway
+    Properties:
+      RouteTableId: !Ref PublicRouteTable
+      GatewayId: !Ref MyInternetGateway
+      DestinationCidrBlock: 0.0.0.0/0
+  PubSubnetARouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      RouteTableId: !Ref PublicRouteTable
+      SubnetId: !Ref PubSubnetA
+  PubSubnetBRouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      RouteTableId: !Ref PublicRouteTable
+      SubnetId: !Ref PubSubnetB
+  NatGatewayA:
+    Type: AWS::EC2::NatGateway
+    Properties:
+      AllocationId: !GetAtt IPAddressA.AllocationId
+      SubnetId: !Ref PubSubnetA
+      Tags:
+      - Key: Name
+        Value: NatGatewayA
+      - Key: Project
+        Value: !Ref TagName
+  IPAddressA:
+    DependsOn: AttachGateway
+    Type: AWS::EC2::EIP
+    Properties:
+      Domain: vpc
+      Tags:
+      - Key: Name
+        Value: EipNatGatewayA
+      - Key: Project
+        Value: !Ref TagName
+  NatGatewayB:
+    Type: AWS::EC2::NatGateway
+    Properties:
+      AllocationId: !GetAtt IPAddressB.AllocationId
+      SubnetId: !Ref PubSubnetB
+      Tags:
+      - Key: Name
+        Value: NatGatewayB
+      - Key: Project
+        Value: !Ref TagName
+  IPAddressB:
+    DependsOn: AttachGateway
+    Type: AWS::EC2::EIP
+    Properties:
+      Domain: vpc
+      Tags:
+      - Key: Name
+        Value: EipNatGatewayB
+      - Key: Project
+        Value: !Ref TagName
+  PrivateRouteTableA:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref MyVPC
+      Tags:
+      - Key: Name
+        Value: PrivateA
+      - Key: Project
+        Value: !Ref TagName
+  PrivateRouteA:
+    Type: AWS::EC2::Route
+    DependsOn: NatGatewayA
+    Properties:
+      RouteTableId: !Ref PrivateRouteTableA
+      NatGatewayId: !Ref NatGatewayA
+      DestinationCidrBlock: 0.0.0.0/0
+  PrvSubnetARouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      RouteTableId: !Ref PrivateRouteTableA
+      SubnetId: !Ref PrvSubnetA
+  PrivateRouteTableB:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref MyVPC
+      Tags:
+      - Key: Name
+        Value: PrivateB
+      - Key: Project
+        Value: !Ref TagName
+  PrivateRouteB:
+    Type: AWS::EC2::Route
+    DependsOn: NatGatewayB
+    Properties:
+      RouteTableId: !Ref PrivateRouteTableB
+      NatGatewayId: !Ref NatGatewayB
+      DestinationCidrBlock: 0.0.0.0/0
+  PrvSubnetBRouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      RouteTableId: !Ref PrivateRouteTableB
+      SubnetId: !Ref PrvSubnetB
+  IPAddressBH:
+    Type: AWS::EC2::EIP
+    DependsOn: AttachGateway
+    Properties:
+      Domain: vpc
+      Tags:
+      - Key: Name
+        Value: Bastion-HA
+      - Key: Project
+        Value: !Ref TagName
+  InstanceSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupName: Bastion-HA-SSH
+      GroupDescription: Bastion-HA-SSH
+      VpcId: !Ref MyVPC
+      Tags:
+      - Key: Name
+        Value: Bastion-HA
+      - Key: Project
+        Value: !Ref TagName
+      SecurityGroupIngress:
+      - IpProtocol: tcp
+        FromPort: 22
+        ToPort: 22
+        CidrIp: 0.0.0.0/0
+  InstanceRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+        - Effect: Allow
+          Principal:
+            Service:
+            - ec2.amazonaws.com
+          Action: sts:AssumeRole
+      Path: "/"
+      RoleName: Bastion-HA-Role
+      Tags:
+      - Key: Name
+        Value: Bastion-HA
+      - Key: Project
+        Value: !Ref TagName
+  AssociateAddressPolicy:
+    Type: 'AWS::IAM::Policy'
+    Properties:
+      PolicyName: AssociateAddress
+      PolicyDocument:
+        Version: 2012-10-17
+        Statement:
+        - Effect: Allow
+          Action:
+          - 'ec2:AssociateAddress'
+          Resource: '*'
+      Roles:
+      - !Ref InstanceRole
+  InstanceProfile:
+    Type: AWS::IAM::InstanceProfile
+    Properties:
+      InstanceProfileName: Bastion-HA-InstanceProfile
+      Path: "/"
+      Roles:
+      - !Ref InstanceRole
+  LaunchConfig:
+    Type: AWS::AutoScaling::LaunchConfiguration
+    Properties:
+      ImageId: !Ref InstanceAmiId
+      IamInstanceProfile:
+        Ref: InstanceProfile
+      KeyName:
+        Ref: KeyName
+      SecurityGroups:
+      - Ref: InstanceSecurityGroup
+      InstanceType:
+        Ref: InstanceType
+      LaunchConfigurationName: Bastion-HA-LaunchConfiguration
+      SpotPrice: !If [UseSpot, !Ref SpotMaxPrice, !Ref 'AWS::NoValue']
+      UserData:
+        Fn::Base64: !Sub
+        - |
+          #!/bin/bash
+          instid=$(curl -s http://169.254.169.254/latest/meta-data/instance-id)
+          aws ec2 associate-address --instance-id $instid --allocation-id ${eipid} --region ${AWS::Region}
+        - eipid: !GetAtt IPAddressBH.AllocationId
+  AutoScalingGroup:
+    Type: AWS::AutoScaling::AutoScalingGroup
+    Properties:
+      AutoScalingGroupName: Bastion-HA-AutoScalingGroup
+      DesiredCapacity: 1
+      LaunchConfigurationName: !Ref LaunchConfig
+      MaxSize: 1
+      MinSize: 1
+      Tags:
+      - Key: Name
+        Value: Bastion-HA
+        PropagateAtLaunch: True
+      - Key: Project
+        Value: !Ref TagName
+        PropagateAtLaunch: True
+      VPCZoneIdentifier: [ !Ref PubSubnetA, !Ref PubSubnetB ]
