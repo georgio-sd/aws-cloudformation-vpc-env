@@ -1,4 +1,4 @@
-# AWS Cloudformation VPC for 3-Tier application with HA Bastion Host
+# AWS Cloudformation VPC for a 3-Tier application with HA Bastion Host
 * New VPC (10.0.0.0/16)
 * Internet Gateway for Internet access
 * 6 Subnets in 2 Availability Zones A and B<br>
