@@ -7,4 +7,5 @@
   Database Subnets A (10.0.13.0/24) and B (10.0.23.0/24) with Local IPs and NO Internet access<br>
 * 2 NatGateways with ElasticIPs for Private Subnets
 * HA Bastion host runs in one of the Public Subnets with an ElasticIP attached
+
 ![VPC-Image](https://github.com/georgio-sd/aws-cloudformation-vpc-env/raw/master/vpc.jpg)
